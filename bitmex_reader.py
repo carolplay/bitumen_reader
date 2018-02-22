@@ -5,6 +5,7 @@ import datetime
 import time
 import os
 import urllib
+import glob
 import logging
 # https://testnet.bitmex.com/api/explorer/
 
@@ -12,24 +13,39 @@ import logging
 exchange = 'BitMEX'
 max_count = 500
 api_url = 'https://www.bitmex.com/api/v1/'
-# def probe_start()
+
+
+def concat_data_files():
+    pass
 
 
 def cont_record(end_point, symbol):
-    filename = '{}_{}_{}.csv'.format(end_point, symbol, exchange)
-    print('Data file is {}.'.format(filename))
-    if os.path.exists(filename):
-        hist = pd.read_csv(filename, index_col=0)
-        this_start = hist.index[-1]
-    else:
-        this_start = ''
-    while pd.to_datetime(this_start) < datetime.datetime.today() - datetime.timedelta(hours=1): #bad condition!!!
-        print(this_start)
-        df = bitmex_rest_call(end_point, symbol, this_start)
-        if os.path.exists(filename):
-            df.iloc[1:].to_csv(filename, mode='a', header=False)
-        else:
-            df.to_csv(filename)
+    data_label = '{}_{}_{}'.format(end_point, symbol, exchange)
+
+    data_directory = os.path.join(os.getcwd(), '..', 'data')
+    if not os.path.isdir(data_directory):
+        os.mkdir(data_directory)
+
+    this_data_directory = os.path.join(data_directory, data_label)
+    if not os.path.isdir(this_data_directory):
+        os.mkdir(this_data_directory)
+
+    logging.basicConfig(filename=os.path.join(this_data_directory, 'download.log'), level=logging.INFO)
+
+    this_start = ''
+    data_files = glob.glob(os.path.join(this_data_directory, '{}_*.csv'.format(data_label)))
+    if data_files:
+        logging.info(max(data_files))
+        df = pd.read_csv(max(data_files), index_col=0)
+        this_start = df.index[-1]
+
+    while not pd.to_datetime(this_start) > datetime.datetime.today() - datetime.timedelta(hours=1):
+        res = bitmex_rest_call(end_point, symbol, this_start)
+        filename = '{}_{}.csv'.format(data_label, this_start)
+        location_file_per_call = os.path.join(this_data_directory, filename)
+        with open(location_file_per_call, 'wb') as f:
+            f.write(res)
+        df = pd.read_csv(location_file_per_call, index_col=0)
         if this_start == df.index[-1]:
             raise IOError('500 records on one timestamp or no more new data, please check!')
         this_start = df.index[-1]
@@ -37,13 +53,17 @@ def cont_record(end_point, symbol):
 
 def bitmex_rest_call(end_point, symbol, this_start):
     params = {'symbol': symbol, 'count': max_count, '_format': 'csv', 'startTime': this_start}
-    r = requests.get(url=api_url + end_point, params=params)
     for i in range(5):
         try:
-            df = pd.read_csv(r.url, index_col=0)
-            return df
+            r = requests.get(url=api_url + end_point, params=params)
+            limit = r.headers['X-RateLimit-Limit']
+            logging.info('Starting timestamp: {}, API call limit left: {}'.format(this_start, limit))
+            if int(limit) < 10:
+                logging.info('API rate limit running low. Sleep 5 sec.')
+                time.sleep(5)
+            return r.content
         except urllib.request.URLError as e:
-            print('time out and retry')
+            logging.warning('time out and retry')
     raise IOError('Time out after 5 retries')
 
 
