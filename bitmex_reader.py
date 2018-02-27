@@ -20,7 +20,7 @@ def concat_data_files():
 
 
 def cont_record(end_point, symbol):
-    data_label = '{}_{}_{}'.format(end_point, symbol, exchange)
+    data_label = '{}_{}_{}'.format(end_point, symbol, exchange).replace('/', '_')
 
     data_directory = os.path.join(os.getcwd(), '..', 'data')
     if not os.path.isdir(data_directory):
@@ -32,7 +32,7 @@ def cont_record(end_point, symbol):
 
     logging.basicConfig(filename=os.path.join(this_data_directory, 'download.log'), level=logging.INFO)
 
-    this_start = ''
+    this_start = '2017-05-01T00:00:00.000Z'
     data_files = glob.glob(os.path.join(this_data_directory, '{}_*.csv'.format(data_label)))
     if data_files:
         logging.info(max(data_files))
@@ -56,11 +56,14 @@ def bitmex_rest_call(end_point, symbol, this_start):
     for i in range(5):
         try:
             r = requests.get(url=api_url + end_point, params=params)
-            limit = r.headers['X-RateLimit-Limit']
-            logging.info('Starting timestamp: {}, API call limit left: {}'.format(this_start, limit))
-            if int(limit) < 10:
-                logging.info('API rate limit running low. Sleep 5 sec.')
-                time.sleep(5)
+            try:
+                limit = r.headers['X-RateLimit-remaining']
+                logging.info('Starting timestamp: {}, API call limit left: {}'.format(this_start, limit))
+                if int(limit) < 10:
+                    logging.info('API rate limit running low. Sleep 5 sec.')
+                    time.sleep(5)
+            except Exception as e:
+                logging.warning(e)
             return r.content
         except urllib.request.URLError as e:
             logging.warning('time out and retry')
