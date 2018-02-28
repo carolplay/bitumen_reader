@@ -56,15 +56,14 @@ def bitmex_rest_call(end_point, symbol, this_start):
     for i in range(5):
         try:
             r = requests.get(url=api_url + end_point, params=params)
-            try:
-                limit = r.headers['X-RateLimit-remaining']
-                logging.info('Starting timestamp: {}, API call limit left: {}'.format(this_start, limit))
-                if int(limit) < 10:
-                    logging.info('API rate limit running low. Sleep 5 sec.')
-                    time.sleep(5)
-            except Exception as e:
-                logging.warning(e)
+            limit = r.headers['X-RateLimit-remaining']
+            logging.info('Starting timestamp: {}, API call limit left: {}'.format(this_start, limit))
+            if int(limit) < 10:
+                logging.info('API rate limit running low. Sleep 5 sec.')
+                time.sleep(5)
             return r.content
+        except KeyError as e:
+            logging.warning(e)
         except urllib.request.URLError as e:
             logging.warning('time out and retry')
     raise IOError('Time out after 5 retries')
